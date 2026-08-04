@@ -1,9 +1,9 @@
 # timeful-cli
 
-An unofficial, dependency-free command-line client for creating and working with public [Timeful](https://timeful.app) availability polls.
+An unofficial, dependency-free command-line client for creating and working with [Timeful](https://timeful.app) availability polls.
 
 > [!IMPORTANT]
-> This project is not affiliated with or endorsed by Timeful. It uses public event endpoints that may change without notice. It intentionally does not accept account cookies, tokens, or other login credentials.
+> This project is not affiliated with or endorsed by Timeful. It uses Timeful endpoints that may change without notice. The CLI never asks for Google or Outlook tokens and never copies cookies from your browser.
 
 ## Install
 
@@ -19,9 +19,32 @@ Or run it without installing:
 uvx --from git+https://github.com/jaykbpark/timeful-cli.git timeful --help
 ```
 
-## Quick start
+## Log in
 
-Create an anonymous event and print its share URL:
+Timeful supports passwordless email login. The CLI sends a six-digit OTP through Timeful and prompts for it without echoing it to the terminal:
+
+```bash
+timeful auth login --email jay@example.com
+timeful auth status
+```
+
+The resulting Timeful session cookie is stored at `~/.config/timeful-cli/cookies.txt`. On POSIX systems, the directory is restricted to the current user and the cookie file is created with `0600` permissions; Windows relies on the user profile's filesystem ACLs. Set `TIMEFUL_CONFIG_DIR` to choose a different directory.
+
+Log out and remove the local session:
+
+```bash
+timeful auth logout
+```
+
+Use `--anonymous` before any non-auth command to deliberately ignore the saved login:
+
+```bash
+timeful --anonymous create ...
+```
+
+## Create an event
+
+Log in first when you want the event associated with your account. This is required for blind polls and for viewing collected guest emails.
 
 ```bash
 timeful create \
@@ -32,32 +55,74 @@ timeful create \
   --url-only
 ```
 
-Read a public event. Both an ID and a full share URL work:
+Useful options include:
+
+- `--blind`: only the authenticated owner can see everyone's responses.
+- `--collect-emails`: ask guests for email addresses; only the authenticated owner receives them.
+- `--days-only`: poll for whole days.
+- `--increment 15|30|60`: choose the response-grid interval.
+
+The CLI refuses to create a blind poll without a working login so you do not accidentally create a poll whose aggregate results you cannot access.
+
+## View results
+
+`results` combines Timeful's event metadata and availability response data into one clean payload containing names, available times, if-needed times, and owner-visible emails:
 
 ```bash
-timeful show EVENT_ID
-timeful show https://timeful.app/e/EVENT_ID
+timeful results https://timeful.app/e/EVENT_ID
 ```
 
-Read responses when the event's privacy settings allow it:
+The time range is inferred from the event. Override it when needed:
 
 ```bash
-timeful responses EVENT_ID \
+timeful results EVENT_ID \
   --time-min 2026-08-10T00:00:00Z \
   --time-max 2026-08-12T00:00:00Z
 ```
 
-Set guest availability by repeating `--available` or `--if-needed` for each slot start:
+The response is structured for both people and scripts:
+
+```json
+{
+  "event": {
+    "id": "...",
+    "name": "Coffee chat"
+  },
+  "responseCount": 2,
+  "respondents": [
+    {
+      "id": "...",
+      "name": "Ada Lovelace",
+      "availability": ["2026-08-10T17:00:00Z"],
+      "ifNeeded": []
+    }
+  ]
+}
+```
+
+For the uncombined API payloads, use `timeful show` and `timeful responses`.
+
+## Respond to an event
+
+Respond using your logged-in Timeful identity:
+
+```bash
+timeful respond EVENT_ID \
+  --as-me \
+  --available 2026-08-10T17:00:00Z \
+  --if-needed 2026-08-11T18:00:00Z
+```
+
+Or respond as a guest:
 
 ```bash
 timeful respond EVENT_ID \
   --name "Jay" \
-  --available 2026-08-10T17:00:00Z \
-  --available 2026-08-10T17:15:00Z \
-  --if-needed 2026-08-11T18:00:00Z
+  --email jay@example.com \
+  --available 2026-08-10T17:00:00Z
 ```
 
-Every command emits JSON by default, making the CLI easy to use with `jq` and shell scripts.
+Repeat `--available` or `--if-needed` for every slot start. Updating a response replaces that identity's previously submitted availability.
 
 ## Advanced event payloads
 
@@ -67,16 +132,16 @@ For Timeful options that do not yet have first-class flags, provide the complete
 timeful create --payload-file event.json
 ```
 
-The CLI never stores credentials or event data locally.
-
 ## Privacy and compatibility
 
-- Event IDs and share URLs should be treated as access links.
-- Public response data may include names or email addresses depending on the event settings. Be careful when saving or piping it elsewhere.
-- Guest response updates overwrite that guest's submitted availability.
+- Treat event IDs and share URLs as access links.
+- A non-blind poll allows anyone with the link to read its names and availability.
+- A blind poll returns all responses only to its authenticated owner.
+- Collected emails are returned only to the authenticated owner.
+- The saved session cookie is an account credential. Do not commit, copy, or share it.
 - Timeful's service and payload formats remain the source of truth. A backend change may require a CLI update.
 
-Timeful itself is open source and publishes a browser-oriented [Plugin API](https://github.com/schej-it/timeful.app/blob/main/PLUGIN_API_README.md). This CLI talks directly to the public event endpoints used by the web application so it can work without a browser session.
+Timeful itself is open source and publishes a browser-oriented [Plugin API](https://github.com/schej-it/timeful.app/blob/main/PLUGIN_API_README.md). This CLI talks directly to the same event and authentication service without needing a browser session.
 
 ## Development
 

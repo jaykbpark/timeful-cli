@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "timeful-cli"
-version = "0.1.0"
-description = "Unofficial command-line client for public Timeful events"
+version = "0.2.0"
+description = "Unofficial command-line client for Timeful events"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
